@@ -1,0 +1,7 @@
+transformers==4.47.1
+peft==0.14.0
+bitsandbytes==0.45.0
+accelerate==1.2.1
+datasets==3.2.0
+google-cloud-aiplatform==1.76.0
+google-cloud-storage==2.19.0

@@ -7,6 +7,14 @@ openai==1.58.1
 pydantic==2.10.4
 python-dotenv==1.0.1
 sentence-transformers==6.3.0
+Pillow==11.1.0
+# transformers requires torch>=2.6 at runtime (a soft check, not a pip
+# metadata constraint) -- leaving torch unpinned let the resolver settle on
+# an older torch/torchvision pair that satisfied declared constraints but
+# broke at import time. Pin the floor explicitly so it can't regress again.
+torch>=2.6
+torchvision
 psycopg[binary]==3.2.3
 pgvector==0.3.6
 google-cloud-bigquery==3.27.0
+google-cloud-secret-manager==2.23.1

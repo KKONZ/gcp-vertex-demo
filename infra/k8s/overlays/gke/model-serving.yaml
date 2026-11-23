@@ -1,0 +1,63 @@
+# UNVERIFIED AGAINST A LIVE GPU -- I can't test vLLM flags/model IDs without
+# one. Before the M5 checkpoint actually schedules this, confirm against
+# current vLLM docs: the HF model id for Gemma 4 E4B, and that
+# --enable-lora + VLLM_ALLOW_RUNTIME_LORA_UPDATING is still the right way to
+# get POST /v1/load_lora_adapter hot-swapping (docs/architecture.md's MLOps
+# step 6). No --lora-modules at startup: the decision adapter doesn't exist
+# until mlops/train.py produces one (M7) -- it gets registered at runtime.
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-serving
+  namespace: vertex-demo
+spec:
+  selector:
+    app: model-serving
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-serving
+  namespace: vertex-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: model-serving
+  template:
+    metadata:
+      labels:
+        app: model-serving
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-l4
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:latest
+          args:
+            - --model=google/gemma-4-e4b
+            - --served-model-name=gemma-4-e4b
+            - --enable-lora
+            - --max-lora-rank=32
+          env:
+            - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
+              value: "True"
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+            limits:
+              cpu: "4"
+              memory: 16Gi
+              nvidia.com/gpu: "1"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 10

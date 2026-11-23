@@ -6,6 +6,10 @@ from dotenv import load_dotenv
 
 load_dotenv()  # before any client module reads env vars, even lazily
 
+from app.secrets import load_secrets  # noqa: E402
+
+load_secrets()  # fills in anything .env didn't, from Secret Manager via Workload Identity
+
 from fastapi import FastAPI  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 

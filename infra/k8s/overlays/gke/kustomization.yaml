@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: vertex-demo
+
+resources:
+  - ../../base
+  - model-serving.yaml
+  - embedding-service.yaml
+
+configMapGenerator:
+  - name: agent-gcp-config
+    literals:
+      - GCP_PROJECT_ID=gcp-vertex-demo-515417
+      - BIGQUERY_LOCATION=US
+
+patches:
+  - path: agent-patch.yaml
+  - path: frontend-service-patch.yaml
+
+# deploy.yml runs `kustomize edit set image` here with the real SHA tag
+# before `kubectl apply -k` -- these are placeholders, never deployed as-is.
+images:
+  - name: agent:local
+    newName: us-central1-docker.pkg.dev/gcp-vertex-demo-515417/gcp-vertex-demo/agent
+    newTag: latest
+  - name: frontend:local
+    newName: us-central1-docker.pkg.dev/gcp-vertex-demo-515417/gcp-vertex-demo/frontend
+    newTag: latest

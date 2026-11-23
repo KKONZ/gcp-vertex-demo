@@ -1,0 +1,36 @@
+name: Scale down GPU workloads
+
+on:
+  schedule:
+    # 03:00 UTC daily -- GPU nodes are the expensive part of this demo;
+    # Autopilot drains them once the Deployments they back hit 0 replicas.
+    - cron: "0 3 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  teardown:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REGION: us-central1
+      CLUSTER: gcp-vertex-demo
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1086671866921/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-deployer@gcp-vertex-demo-515417.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud components install gke-gcloud-auth-plugin --quiet
+      - run: gcloud container clusters get-credentials ${{ env.CLUSTER }} --region ${{ env.REGION }}
+
+      - name: Scale GPU deployments to zero
+        run: |
+          kubectl scale deployment model-serving embedding-service \
+            --replicas=0 -n vertex-demo

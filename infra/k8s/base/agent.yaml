@@ -1,0 +1,67 @@
+# Base manifest -- registry-agnostic image name/env values are patched per
+# overlay (kind: local image, no GCP env; gke: Artifact Registry image,
+# Workload Identity annotation, in-cluster pgvector/model-serving URLs).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent
+  namespace: vertex-demo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent
+  namespace: vertex-demo
+spec:
+  selector:
+    app: agent
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent
+  namespace: vertex-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent
+  template:
+    metadata:
+      labels:
+        app: agent
+    spec:
+      serviceAccountName: agent
+      containers:
+        - name: agent
+          image: agent:local
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: agent-config
+          volumeMounts:
+            - name: personas
+              mountPath: /app/data
+          readinessProbe:
+            httpGet:
+              path: /personas
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            # torch + the EmbeddingGemma weights loaded in-process (see
+            # app/clients/embeddings.py) push well past a typical FastAPI
+            # pod's footprint -- 1Gi OOMKilled on first real /assess call.
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              memory: 2560Mi
+      volumes:
+        - name: personas
+          configMap:
+            name: agent-personas

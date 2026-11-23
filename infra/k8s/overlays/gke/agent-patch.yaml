@@ -1,0 +1,30 @@
+# No agent-secrets/adc-credentials Secret here, unlike the kind overlay --
+# OPENAI_API_KEY is deliberately absent so app/secrets.py's Secret Manager
+# fallback fires for real, and BigQuery/GKE Workload Identity supplies ambient
+# credentials via the annotated ServiceAccount below, no ADC file needed.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent
+  namespace: vertex-demo
+  annotations:
+    iam.gke.io/gcp-service-account: agent-workload@gcp-vertex-demo-515417.iam.gserviceaccount.com
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent
+  namespace: vertex-demo
+spec:
+  template:
+    spec:
+      containers:
+        - name: agent
+          env:
+            - name: SELF_HOSTED_MODEL_URL
+              value: http://model-serving:8000/v1
+          envFrom:
+            - configMapRef:
+                name: agent-config
+            - configMapRef:
+                name: agent-gcp-config

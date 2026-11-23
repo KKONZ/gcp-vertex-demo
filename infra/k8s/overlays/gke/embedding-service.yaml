@@ -1,0 +1,58 @@
+# Same caveat as model-serving.yaml -- unverified against a live GPU. The
+# `--task embed` flag/pooling runner API has moved around across vLLM
+# versions; confirm against the vLLM version actually pulled at the M5
+# checkpoint before relying on this. No fallback by design (see
+# app/clients/embeddings.py) -- if this doesn't come up clean, retrieval
+# breaks loudly rather than silently mixing embedding spaces.
+apiVersion: v1
+kind: Service
+metadata:
+  name: embedding-service
+  namespace: vertex-demo
+spec:
+  selector:
+    app: embedding-service
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedding-service
+  namespace: vertex-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: embedding-service
+  template:
+    metadata:
+      labels:
+        app: embedding-service
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-l4
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:latest
+          args:
+            - --model=google/embeddinggemma-2
+            - --served-model-name=embeddinggemma-2
+            - --task=embed
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: "2"
+              memory: 8Gi
+            limits:
+              cpu: "2"
+              memory: 8Gi
+              nvidia.com/gpu: "1"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 10

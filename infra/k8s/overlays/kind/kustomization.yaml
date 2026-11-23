@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: vertex-demo
+
+resources:
+  - ../../base
+
+configMapGenerator:
+  # Non-secret GCP config -- retrieval calls BigQuery even in local dev (see
+  # app/nodes/retrieval.py), so the kind pod needs the same project/location
+  # the developer's own .env already uses.
+  - name: agent-gcp-config
+    literals:
+      - GCP_PROJECT_ID=gcp-vertex-demo-515417
+      - BIGQUERY_LOCATION=US
+
+patches:
+  - path: agent-patch.yaml

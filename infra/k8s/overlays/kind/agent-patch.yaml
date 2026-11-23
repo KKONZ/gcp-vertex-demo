@@ -1,0 +1,32 @@
+# Adds BigQuery credentials + GCP project config on top of base's agent-config.
+# agent-secrets / adc-credentials are NOT kustomize-generated -- they're real
+# secret material (API key, ADC token), created imperatively by
+# load-secrets.sh so a value never lands in a committed manifest.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent
+  namespace: vertex-demo
+spec:
+  template:
+    spec:
+      containers:
+        - name: agent
+          env:
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /var/secrets/google/application_default_credentials.json
+          envFrom:
+            - configMapRef:
+                name: agent-config
+            - configMapRef:
+                name: agent-gcp-config
+            - secretRef:
+                name: agent-secrets
+          volumeMounts:
+            - name: adc
+              mountPath: /var/secrets/google
+              readOnly: true
+      volumes:
+        - name: adc
+          secret:
+            secretName: adc-credentials

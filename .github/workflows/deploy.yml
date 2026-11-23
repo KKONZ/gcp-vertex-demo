@@ -1,0 +1,54 @@
+name: Deploy to GKE
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (defaults to the current master SHA)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # workflow_dispatch only -- this job, and only this job, carries
+    # id-token: write. Never add this permission to a pull_request_target job
+    # (see docs/architecture.md's threat model note).
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REGION: us-central1
+      REPO: us-central1-docker.pkg.dev/gcp-vertex-demo-515417/gcp-vertex-demo
+      CLUSTER: gcp-vertex-demo
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1086671866921/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-deployer@gcp-vertex-demo-515417.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud components install gke-gcloud-auth-plugin --quiet
+      - run: gcloud container clusters get-credentials ${{ env.CLUSTER }} --region ${{ env.REGION }}
+
+      - name: Pin image tags
+        working-directory: infra/k8s/overlays/gke
+        run: |
+          TAG="${{ github.event.inputs.image_tag }}"
+          if [ -z "$TAG" ]; then TAG="${{ github.sha }}"; fi
+          kubectl kustomize . >/dev/null  # fail fast if the overlay is broken before editing it
+          # kustomize edit needs the kustomize binary kubectl bundles internally;
+          # invoke the same transform via `kubectl kustomize` by rewriting images: inline instead.
+          sed -i "s#newTag: latest#newTag: $TAG#" kustomization.yaml
+
+      - name: Apply
+        run: |
+          kubectl apply -k infra/k8s/overlays/gke
+          kubectl rollout status deployment/agent -n vertex-demo --timeout=300s
+          kubectl rollout status deployment/frontend -n vertex-demo --timeout=300s

@@ -1,0 +1,58 @@
+# Self-hosted Postgres/pgvector in-cluster -- StatefulSet + PVC, per
+# docs/architecture.md. Same pgvector/pgvector:pg16 image the README's local
+# `docker run` command uses, so behavior doesn't change between the two.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgvector
+  namespace: vertex-demo
+  labels:
+    app: pgvector
+spec:
+  clusterIP: None
+  selector:
+    app: pgvector
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pgvector
+  namespace: vertex-demo
+spec:
+  serviceName: pgvector
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pgvector
+  template:
+    metadata:
+      labels:
+        app: pgvector
+    spec:
+      containers:
+        - name: pgvector
+          image: pgvector/pgvector:pg16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_PASSWORD
+              value: postgres
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

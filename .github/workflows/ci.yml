@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  REGION: us-central1
+  REPO: us-central1-docker.pkg.dev/gcp-vertex-demo-515417/gcp-vertex-demo
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest -r services/agent/requirements.txt
+      - name: Run tests
+        # tests/ is still empty at this milestone -- pytest's own exit code 5
+        # ("no tests collected") is the expected state, not a CI failure.
+        # Any other nonzero exit is a real failure.
+        run: |
+          set +e
+          pytest
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ] && [ "$code" -ne 5 ]; then exit "$code"; fi
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    # Build-only on PRs/branches (proves the image builds); push to Artifact
+    # Registry only on master, where the WIF auth step lives. Never on
+    # pull_request_target -- see docs/architecture.md's threat model note.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1086671866921/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-deployer@gcp-vertex-demo-515417.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push agent
+        run: |
+          docker build -f services/agent/Dockerfile -t ${{ env.REPO }}/agent:${{ github.sha }} -t ${{ env.REPO }}/agent:latest .
+          docker push ${{ env.REPO }}/agent:${{ github.sha }}
+          docker push ${{ env.REPO }}/agent:latest
+
+      - name: Build and push frontend
+        run: |
+          docker build -f services/frontend/Dockerfile -t ${{ env.REPO }}/frontend:${{ github.sha }} -t ${{ env.REPO }}/frontend:latest .
+          docker push ${{ env.REPO }}/frontend:${{ github.sha }}
+          docker push ${{ env.REPO }}/frontend:latest
